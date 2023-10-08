@@ -1,36 +1,110 @@
 package main
 
 import (
+	"bufio"
+	"encoding/csv"
 	"github.com/miekg/dns"
 	"github.com/panjf2000/ants/v2"
-	"github.com/thanhpk/randstr"
+	"github.com/schollz/progressbar/v3"
+	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 )
 
+// 攻击
+//func main() {
+//	defer ants.Release()
+//
+//	var wg sync.WaitGroup
+//
+//	p, _ := ants.NewPool(1000, ants.WithPreAlloc(true))
+//
+//	c := new(dns.Client)
+//	args := os.Args
+//	qname := args[1]
+//	runcount, _ := strconv.Atoi(args[2])
+//	for i := runcount; i > 0; i-- {
+//		for _, v := range args[3:] {
+//			wg.Add(1)
+//
+//			fqdn := strings.ToLower(randstr.String(10)) + "." + qname
+//
+//			print(fqdn + "\n")
+//			msg := dns.Msg{}
+//			msg.SetQuestion(fqdn, dns.TypeA)
+//			vi := v + ":53"
+//
+//			_ = p.Submit(
+//				func() {
+//					_, _, err := c.Exchange(&msg, vi)
+//					wg.Done()
+//					if err != nil {
+//						return
+//					}
+//				})
+//		}
+//	}
+//	wg.Wait()
+//	print("完成！！")
+//}
+
+// 测试入口出口关联
 func main() {
 	defer ants.Release()
 
 	var wg sync.WaitGroup
 
-	p, _ := ants.NewPool(10000, ants.WithPreAlloc(true))
+	p, _ := ants.NewPool(100, ants.WithPreAlloc(true))
 
 	c := new(dns.Client)
 	args := os.Args
-	qname := args[1]
+	// 目标域名
+	qname := args[0]
+	// 目标文件路径
+	qpath := args[1]
+	// 运行次数
 	runcount, _ := strconv.Atoi(args[2])
+
+	f, err := os.Open(qpath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	// read csv values using csv.Reader
+	csvReader := csv.NewReader(f)
+	// 进度条初始化
+	r := bufio.NewReader(f)
+	num := 0
+	for {
+		_, err := r.ReadString('\n')
+		if io.EOF == err || nil != err {
+			break
+		}
+		num += 1
+	}
+	bar := progressbar.Default(int64(num))
+
 	for i := runcount; i > 0; i-- {
-		for _, v := range args[3:] {
+		for {
 			wg.Add(1)
 
-			fqdn := strings.ToLower(randstr.String(10)) + "." + qname
+			// 逐行读取
+			rec, err := csvReader.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
 
-			print(fqdn + "\n")
+			fqdn := strings.ReplaceAll(rec[0], ":", "-") + "." + qname
+
 			msg := dns.Msg{}
 			msg.SetQuestion(fqdn, dns.TypeA)
-			vi := v + ":53"
+			vi := rec[0] + ":53"
 
 			_ = p.Submit(
 				func() {
@@ -40,6 +114,7 @@ func main() {
 						return
 					}
 				})
+			bar.Add(1)
 		}
 	}
 	wg.Wait()
