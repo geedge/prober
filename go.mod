@@ -6,6 +6,7 @@ require (
 	github.com/miekg/dns v1.1.55
 	github.com/panjf2000/ants/v2 v2.8.2
 	github.com/schollz/progressbar/v3 v3.13.1
+	github.com/thanhpk/randstr v1.0.6
 )
 
 require (
